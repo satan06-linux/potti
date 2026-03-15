@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+gen/
+.venv/
+venv/
+env/
+
+# Database (contains user data — do not commit)
+predictions.db
+
+# Model weights (large binary files — use Git LFS or share separately)
+*.pth
+
+# Dataset CIF files (large — share separately)
+Li_Battery_GNN_Dataset/
+
+# Temp / debug scripts
+check_db.py
+verify.py
+test_formula.py
+
+# Images / plots generated at runtime
+*.png
+
+# Misc
+*.pptx
+.DS_Store
+Thumbs.db
+
+# Docs
+README.md

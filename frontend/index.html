@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Battery GNN Predictor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f0f2ff; min-height: 100vh; }
+
+    .app-bg { background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #6366f1 100%); }
+    .card { background: white; border-radius: 16px; box-shadow: 0 4px 24px rgba(79,70,229,0.10); }
+    .glass { background: rgba(255,255,255,0.13); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.22); border-radius: 16px; }
+
+    .prop-icon-card { border-radius: 14px; padding: 24px 16px; text-align: center; cursor: pointer; transition: transform 0.18s, box-shadow 0.18s; border: 1.5px solid rgba(255,255,255,0.18); }
+    .prop-icon-card:hover { transform: translateY(-4px); box-shadow: 0 8px 32px rgba(79,70,229,0.18); }
+
+    .tab-pill { padding: 7px 20px; border-radius: 999px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.18s; color: rgba(255,255,255,0.7); }
+    .tab-pill.active { background: white; color: #4f46e5; font-weight: 700; box-shadow: 0 2px 12px rgba(79,70,229,0.18); }
+    .tab-pill:hover:not(.active) { background: rgba(255,255,255,0.15); color: white; }
+
+    .input-field { width: 100%; border: 1.5px solid #e0e7ff; border-radius: 10px; padding: 10px 14px; font-size: 14px; outline: none; transition: border 0.18s; background: #f8f9ff; }
+    .input-field:focus { border-color: #6366f1; background: white; }
+
+    .btn-primary { background: linear-gradient(135deg, #6366f1, #7c3aed); color: white; border: none; border-radius: 10px; padding: 12px 0; font-size: 15px; font-weight: 600; cursor: pointer; width: 100%; transition: opacity 0.18s, transform 0.18s; }
+    .btn-primary:hover:not(:disabled) { opacity: 0.92; transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .chip { display: inline-block; background: #ede9fe; color: #5b21b6; border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 500; cursor: pointer; margin: 3px; transition: background 0.15s; }
+    .chip:hover { background: #ddd6fe; }
+
+    .result-prop { border-radius: 12px; padding: 14px 16px; border-left: 4px solid; }
+    .spinner { border: 3px solid #e0e7ff; border-top: 3px solid #6366f1; border-radius: 50%; width: 30px; height: 30px; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .fade-in { animation: fadeIn 0.35s ease; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+    .upload-zone { border: 2px dashed #c7d2fe; border-radius: 12px; transition: all 0.2s; background: #f8f9ff; }
+    .upload-zone:hover, .upload-zone.drag { border-color: #6366f1; background: #eef2ff; }
+
+    .stat-card { border-radius: 14px; padding: 18px 20px; color: white; }
+    .modal-overlay { position:fixed;inset:0;background:rgba(30,20,60,0.45);z-index:100;display:flex;align-items:center;justify-content:center; }
+
+    .feedback-star { font-size: 24px; cursor: pointer; transition: transform 0.1s; }
+    .feedback-star:hover { transform: scale(1.2); }
+
+    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #f0f2ff; } ::-webkit-scrollbar-thumb { background: #c7d2fe; border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- ===== LOGIN PAGE ===== -->
+<div id="page-login" class="app-bg min-h-screen flex items-center justify-center p-4">
+  <div class="w-full max-w-md fade-in">
+    <div class="text-center mb-8">
+      <div class="text-5xl mb-3">⚡</div>
+      <h1 class="text-3xl font-bold text-white">Battery GNN Predictor</h1>
+      <p class="text-indigo-200 text-sm mt-2">Graph Neural Network for Battery Material Property Prediction</p>
+    </div>
+    <div class="card p-8">
+      <!-- Tab toggle -->
+      <div class="flex rounded-xl bg-slate-100 p-1 mb-6">
+        <button id="auth-tab-signin" onclick="switchAuthTab('signin')"
+          class="flex-1 py-2 rounded-lg bg-white shadow text-indigo-700 font-semibold text-sm transition">Sign In</button>
+        <button id="auth-tab-register" onclick="switchAuthTab('register')"
+          class="flex-1 py-2 rounded-lg text-slate-500 font-medium text-sm transition">New Account</button>
+      </div>
+
+      <div id="auth-error" class="hidden bg-red-50 text-red-600 text-sm p-3 rounded-lg mb-4"></div>
+      <div id="auth-success" class="hidden bg-green-50 text-green-700 text-sm p-3 rounded-lg mb-4"></div>
+
+      <!-- SIGN IN -->
+      <div id="form-signin" class="space-y-4">
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">Gmail Address</label>
+          <input id="signin-email" type="email" placeholder="you@gmail.com" class="input-field"
+            onkeydown="if(event.key==='Enter') doLogin()" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">Password</label>
+          <input id="signin-password" type="password" placeholder="Enter password" class="input-field"
+            onkeydown="if(event.key==='Enter') doLogin()" />
+        </div>
+        <button onclick="doLogin()" class="btn-primary mt-2">🚀 Sign In</button>
+      </div>
+
+      <!-- REGISTER -->
+      <div id="form-register" class="hidden space-y-4">
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">Gmail Address</label>
+          <input id="reg-email" type="email" placeholder="you@gmail.com" class="input-field" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">Password</label>
+          <input id="reg-password" type="password" placeholder="Create a password" class="input-field" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">Confirm Password</label>
+          <input id="reg-confirm" type="password" placeholder="Repeat password" class="input-field"
+            onkeydown="if(event.key==='Enter') doRegister()" />
+        </div>
+        <button onclick="doRegister()" class="btn-primary mt-2">✨ Create Account</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MAIN APP ===== -->
+<div id="page-app" class="hidden min-h-screen flex flex-col">
+
+  <!-- HEADER -->
+  <div class="app-bg px-6 py-4">
+    <div class="max-w-7xl mx-auto">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <span class="text-2xl">⚡</span>
+          <div>
+            <div class="text-white font-bold text-xl leading-tight">Battery GNN Predictor</div>
+            <div class="text-indigo-200 text-xs">Graph Neural Network for Battery Material Property Prediction</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <div id="api-badge" class="glass px-3 py-1 text-xs text-green-300 font-semibold flex items-center gap-1">
+            <span class="w-2 h-2 bg-green-400 rounded-full inline-block"></span> API Connected
+          </div>
+          <span id="nav-admin-badge" class="hidden glass px-3 py-1 text-xs text-yellow-300 font-semibold">★ Admin</span>
+          <span class="text-indigo-200 text-sm">Hi, <span id="nav-username" class="text-white font-semibold"></span></span>
+          <button onclick="logout()" class="glass px-3 py-1.5 text-white text-xs font-medium hover:bg-white/20 transition rounded-xl">Logout</button>
+        </div>
+      </div>
+      <!-- TABS -->
+      <div class="flex gap-2 flex-wrap">
+        <button onclick="showTab('predict')"  id="tab-predict"  class="tab-pill active">⚡ Predict</button>
+        <button onclick="showTab('compare')"  id="tab-compare"  class="tab-pill">⚖️ Compare</button>
+        <button onclick="showTab('batch')"    id="tab-batch"    class="tab-pill">📦 Batch</button>
+        <button onclick="showTab('history')"  id="tab-history"  class="tab-pill">📋 History</button>
+        <button onclick="showTab('analytics')" id="tab-analytics" class="hidden tab-pill">📊 Analytics</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAGE CONTENT -->
+  <div class="flex-1 max-w-7xl mx-auto w-full p-6">
+
+    <!-- ===== PREDICT TAB ===== -->
+    <div id="tab-content-predict" class="fade-in">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- LEFT: Input Panel -->
+        <div class="lg:col-span-1 space-y-4">
+          <div class="card p-6">
+            <h3 class="font-bold text-slate-800 text-base mb-4 flex items-center gap-2">🧪 Material Input</h3>
+
+            <!-- Mode Toggle -->
+            <div class="flex rounded-xl bg-indigo-50 p-1 mb-4 text-xs">
+              <button id="toggle-cif"  onclick="setInputMode('cif')"
+                class="flex-1 py-1.5 rounded-lg bg-white shadow text-indigo-700 font-semibold transition">📄 CIF File</button>
+              <button id="toggle-comp" onclick="setInputMode('composition')"
+                class="flex-1 py-1.5 rounded-lg text-slate-500 font-medium transition">🔬 Formula</button>
+            </div>
+
+            <!-- CIF Upload -->
+            <div id="input-cif">
+              <div id="upload-zone" class="upload-zone p-6 text-center cursor-pointer"
+                onclick="document.getElementById('cif-input').click()"
+                ondragover="event.preventDefault();this.classList.add('drag')"
+                ondragleave="this.classList.remove('drag')"
+                ondrop="handleDrop(event)">
+                <div class="text-3xl mb-2">🧬</div>
+                <p class="text-slate-600 text-sm font-medium">Drop .cif file here</p>
+                <p class="text-slate-400 text-xs mt-1">or click to browse</p>
+                <input id="cif-input" type="file" accept=".cif" class="hidden" onchange="handleFile(this.files[0])" />
+              </div>
+              <div id="file-info" class="hidden mt-3 bg-indigo-50 rounded-xl p-3 flex items-center gap-2">
+                <span class="text-xl">📄</span>
+                <div><div id="file-name" class="font-semibold text-slate-800 text-xs"></div><div id="file-size" class="text-xs text-slate-400"></div></div>
+              </div>
+            </div>
+
+            <!-- Formula Input -->
+            <div id="input-composition" class="hidden space-y-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Battery Formula</label>
+                <input id="inp-formula" type="text" placeholder="e.g., LiFePO4"
+                  class="input-field font-mono" oninput="onFormulaInput()" />
+                <p class="text-xs text-slate-400 mt-1">Must contain Li for battery prediction</p>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-2">Example Materials</label>
+                <div id="example-chips">
+                  <span class="chip" onclick="setFormula('LiCoO2')">LiCoO2</span>
+                  <span class="chip" onclick="setFormula('LiFePO4')">LiFePO4</span>
+                  <span class="chip" onclick="setFormula('Li2MnO3')">Li2MnO3</span>
+                  <span class="chip" onclick="setFormula('LiNiO2')">LiNiO2</span>
+                  <span class="chip" onclick="setFormula('LiMn2O4')">LiMn2O4</span>
+                  <span class="chip" onclick="setFormula('Li2FeSiO4')">Li2FeSiO4</span>
+                  <span class="chip" onclick="setFormula('LiTiO2')">LiTiO2</span>
+                </div>
+              </div>
+            </div>
+
+            <button id="predict-btn" onclick="runPrediction()" disabled class="btn-primary mt-4">
+              🚀 Predict Properties
+            </button>
+          </div>
+        </div>
+
+        <!-- RIGHT: Welcome / Results -->
+        <div class="lg:col-span-2 space-y-4">
+
+          <!-- Welcome state -->
+          <div id="results-empty" class="card p-8 fade-in">
+            <h2 class="text-2xl font-bold text-slate-800 text-center mb-2">Welcome to Battery GNN Predictor</h2>
+            <p class="text-slate-500 text-sm text-center mb-8">Enter a battery material formula to predict its properties using our Graph Neural Network model.</p>
+            <div class="grid grid-cols-2 gap-4">
+              <div class="prop-icon-card bg-gradient-to-br from-indigo-50 to-blue-50">
+                <div class="text-4xl mb-3">🔋</div>
+                <div class="font-bold text-slate-800 text-sm">Voltage Prediction</div>
+                <div class="text-xs text-slate-500 mt-1">Average discharge voltage</div>
+              </div>
+              <div class="prop-icon-card bg-gradient-to-br from-orange-50 to-yellow-50">
+                <div class="text-4xl mb-3">⚡</div>
+                <div class="font-bold text-slate-800 text-sm">Formation Energy</div>
+                <div class="text-xs text-slate-500 mt-1">Energy per atom (eV)</div>
+              </div>
+              <div class="prop-icon-card bg-gradient-to-br from-green-50 to-teal-50">
+                <div class="text-4xl mb-3">📊</div>
+                <div class="font-bold text-slate-800 text-sm">Density Analysis</div>
+                <div class="text-xs text-slate-500 mt-1">Gravimetric density</div>
+              </div>
+              <div class="prop-icon-card bg-gradient-to-br from-purple-50 to-pink-50">
+                <div class="text-4xl mb-3">🔬</div>
+                <div class="font-bold text-slate-800 text-sm">Stability</div>
+                <div class="text-xs text-slate-500 mt-1">Thermodynamic stability</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Loading -->
+          <div id="results-loading" class="hidden card p-12 text-center fade-in">
+            <div class="spinner mx-auto mb-4"></div>
+            <p class="text-slate-600 font-medium">Analyzing crystal structure...</p>
+            <p class="text-slate-400 text-xs mt-1">Running GNN ensemble prediction</p>
+          </div>
+
+          <!-- Error -->
+          <div id="results-error" class="hidden card p-6 fade-in"></div>
+
+          <!-- Results -->
+          <div id="results-content" class="hidden space-y-4 fade-in">
+            <div class="card p-6">
+              <div class="flex items-start justify-between mb-4">
+                <div>
+                  <div class="text-xs text-slate-400 font-medium uppercase tracking-wide">Predicted Material</div>
+                  <div id="res-formula" class="text-xl font-bold text-slate-800 mt-0.5"></div>
+                  <div id="res-material-id" class="text-xs text-slate-400 mt-0.5"></div>
+                </div>
+                <div id="stability-badge" class="text-xs font-bold px-3 py-1.5 rounded-full"></div>
+              </div>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div class="result-prop bg-blue-50"   style="border-color:#3b82f6"><div class="text-xs text-blue-500 font-semibold mb-1">Voltage</div><div id="res-voltage" class="text-lg font-bold text-blue-700"></div><div class="text-xs text-blue-400">Volts (V)</div></div>
+                <div class="result-prop bg-orange-50" style="border-color:#f97316"><div class="text-xs text-orange-500 font-semibold mb-1">Form. Energy</div><div id="res-energy" class="text-lg font-bold text-orange-700"></div><div class="text-xs text-orange-400">eV/atom</div></div>
+                <div class="result-prop bg-green-50"  style="border-color:#22c55e"><div class="text-xs text-green-500 font-semibold mb-1">Density</div><div id="res-density" class="text-lg font-bold text-green-700"></div><div class="text-xs text-green-400">g/cm³</div></div>
+                <div class="result-prop bg-purple-50" style="border-color:#a855f7"><div class="text-xs text-purple-500 font-semibold mb-1">Hull Energy</div><div id="res-hull" class="text-lg font-bold text-purple-700"></div><div class="text-xs text-purple-400">eV</div></div>
+              </div>
+              <!-- Confidence Bars -->
+              <div class="mt-4 pt-4 border-t border-slate-100">
+                <div class="text-xs font-semibold text-slate-500 mb-3 flex items-center gap-1">🎯 Prediction Confidence <span class="text-slate-400 font-normal ml-1">(lower std = more confident)</span></div>
+                <div id="confidence-bars" class="space-y-2"></div>
+              </div>
+            </div>
+
+            <!-- Line Chart -->
+            <div class="card p-6">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">📈 Property Visualization</h3>
+                <span class="text-xs text-slate-400">Normalized comparison</span>
+              </div>
+              <canvas id="prop-chart" height="100"></canvas>
+            </div>
+
+            <!-- Feedback -->
+            <div class="card p-5">
+              <h3 class="font-semibold text-slate-700 text-sm mb-3">💬 Rate this prediction</h3>
+              <div class="flex items-center gap-2 mb-3">
+                <span id="star-1" class="feedback-star" onclick="setRating(1)">☆</span>
+                <span id="star-2" class="feedback-star" onclick="setRating(2)">☆</span>
+                <span id="star-3" class="feedback-star" onclick="setRating(3)">☆</span>
+                <span id="star-4" class="feedback-star" onclick="setRating(4)">☆</span>
+                <span id="star-5" class="feedback-star" onclick="setRating(5)">☆</span>
+                <span id="rating-label" class="text-xs text-slate-400 ml-2"></span>
+              </div>
+              <textarea id="feedback-text" rows="2" placeholder="Optional comment about this prediction..."
+                class="input-field text-xs resize-none"></textarea>
+              <button onclick="submitFeedback()" id="feedback-btn"
+                class="mt-2 bg-indigo-600 text-white text-xs px-4 py-2 rounded-lg hover:bg-indigo-700 transition font-semibold disabled:opacity-40"
+                disabled>Submit Feedback</button>
+              <div id="feedback-thanks" class="hidden text-xs text-green-600 mt-2 font-medium">✅ Thanks for your feedback!</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== COMPARE TAB ===== -->
+    <div id="tab-content-compare" class="hidden fade-in space-y-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="card p-5">
+          <div class="text-xs font-semibold text-indigo-600 mb-2 uppercase tracking-wide">Material A</div>
+          <input id="cmp-formula-a" type="text" placeholder="e.g. LiCoO2" class="input-field font-mono mb-2" oninput="checkCompareReady()" />
+          <div class="flex flex-wrap gap-1 mt-1">
+            <span class="chip text-xs" onclick="document.getElementById('cmp-formula-a').value='LiCoO2';checkCompareReady()">LiCoO2</span>
+            <span class="chip text-xs" onclick="document.getElementById('cmp-formula-a').value='LiFePO4';checkCompareReady()">LiFePO4</span>
+            <span class="chip text-xs" onclick="document.getElementById('cmp-formula-a').value='LiNiO2';checkCompareReady()">LiNiO2</span>
+          </div>
+        </div>
+        <div class="card p-5">
+          <div class="text-xs font-semibold text-purple-600 mb-2 uppercase tracking-wide">Material B</div>
+          <input id="cmp-formula-b" type="text" placeholder="e.g. LiFePO4" class="input-field font-mono mb-2" oninput="checkCompareReady()" />
+          <div class="flex flex-wrap gap-1 mt-1">
+            <span class="chip text-xs" onclick="document.getElementById('cmp-formula-b').value='LiMn2O4';checkCompareReady()">LiMn2O4</span>
+            <span class="chip text-xs" onclick="document.getElementById('cmp-formula-b').value='Li2MnO3';checkCompareReady()">Li2MnO3</span>
+            <span class="chip text-xs" onclick="document.getElementById('cmp-formula-b').value='LiTiO2';checkCompareReady()">LiTiO2</span>
+          </div>
+        </div>
+      </div>
+      <button id="compare-btn" onclick="runCompare()" disabled class="btn-primary max-w-xs mx-auto block">⚖️ Compare Materials</button>
+      <div id="compare-loading" class="hidden text-center py-8"><div class="spinner mx-auto mb-2"></div><p class="text-sm text-slate-500">Running comparison...</p></div>
+      <div id="compare-error" class="hidden card p-4"></div>
+      <div id="compare-results" class="hidden space-y-4 fade-in">
+        <!-- Side-by-side property table -->
+        <div class="card p-6 overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b-2 border-indigo-50">
+                <th class="text-left py-2 pr-4 text-slate-500 text-xs uppercase">Property</th>
+                <th class="text-right py-2 pr-4 text-indigo-600 text-xs uppercase" id="cmp-head-a">Material A</th>
+                <th class="text-right py-2 pr-4 text-purple-600 text-xs uppercase" id="cmp-head-b">Material B</th>
+                <th class="text-right py-2 text-slate-400 text-xs uppercase">Winner</th>
+              </tr>
+            </thead>
+            <tbody id="compare-table-body"></tbody>
+          </table>
+        </div>
+        <!-- Radar chart -->
+        <div class="card p-6">
+          <h3 class="font-bold text-slate-800 text-sm mb-4">🕸️ Property Radar Chart</h3>
+          <div class="max-w-md mx-auto"><canvas id="radar-chart"></canvas></div>
+        </div>
+        <!-- Confidence comparison -->
+        <div class="card p-6">
+          <h3 class="font-bold text-slate-800 text-sm mb-4">🎯 Confidence Comparison</h3>
+          <div id="compare-confidence" class="space-y-3"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== BATCH TAB ===== -->
+    <div id="tab-content-batch" class="hidden fade-in space-y-4">
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-800 mb-1">📦 Batch Prediction</h3>
+        <p class="text-xs text-slate-400 mb-4">Enter up to 20 formulas, one per line. Results can be downloaded as CSV.</p>
+        <textarea id="batch-input" rows="8" placeholder="LiCoO2&#10;LiFePO4&#10;Li2MnO3&#10;LiNiO2&#10;LiMn2O4"
+          class="input-field font-mono text-sm resize-none mb-3" oninput="checkBatchReady()"></textarea>
+        <div class="flex items-center gap-3">
+          <button id="batch-btn" onclick="runBatch()" disabled class="btn-primary flex-1">🚀 Run Batch Prediction</button>
+          <button id="batch-download" onclick="downloadBatchCSV()" class="hidden border border-indigo-300 text-indigo-600 px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-50 transition">⬇️ CSV</button>
+        </div>
+      </div>
+      <div id="batch-loading" class="hidden card p-8 text-center"><div class="spinner mx-auto mb-3"></div><p class="text-slate-500 text-sm">Processing batch...</p><p id="batch-progress" class="text-xs text-slate-400 mt-1"></p></div>
+      <div id="batch-results" class="hidden card p-6 fade-in">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-bold text-slate-800 text-sm">Results <span id="batch-count" class="text-indigo-600"></span></h3>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="border-b-2 border-indigo-50 text-slate-500 text-xs uppercase">
+              <th class="text-left py-2 pr-3">Formula</th>
+              <th class="text-right py-2 pr-3">Voltage (V)</th>
+              <th class="text-right py-2 pr-3">Form. Energy</th>
+              <th class="text-right py-2 pr-3">Density</th>
+              <th class="text-right py-2 pr-3">Hull (eV)</th>
+              <th class="text-right py-2 pr-3">Stability</th>
+              <th class="text-right py-2">Confidence</th>
+            </tr></thead>
+            <tbody id="batch-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== HISTORY TAB ===== -->
+    <div id="tab-content-history" class="hidden fade-in">
+      <div class="card p-6">
+        <div class="flex items-center justify-between mb-5">
+          <h3 class="font-bold text-slate-800 flex items-center gap-2">📋 Prediction History</h3>
+          <button onclick="loadHistory()" class="text-sm text-indigo-600 hover:text-indigo-700 font-medium">↻ Refresh</button>
+        </div>
+        <div id="history-loading" class="text-center py-10"><div class="spinner mx-auto"></div></div>
+        <div id="history-empty" class="hidden text-center py-10 text-slate-400"><div class="text-4xl mb-2">📭</div><p class="text-sm">No predictions yet</p></div>
+        <div id="history-table" class="hidden overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="border-b-2 border-indigo-50 text-slate-500 text-xs uppercase">
+              <th class="text-left py-3 pr-4">Material</th>
+              <th class="text-right py-3 pr-4">Voltage (V)</th>
+              <th class="text-right py-3 pr-4">Form. Energy</th>
+              <th class="text-right py-3 pr-4">Density</th>
+              <th class="text-right py-3 pr-4">Hull (eV)</th>
+              <th class="text-right py-3">Date</th>
+            </tr></thead>
+            <tbody id="history-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== ANALYTICS TAB ===== -->
+    <div id="tab-content-analytics" class="hidden fade-in space-y-6">
+      <!-- Stats -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="stat-card" style="background:linear-gradient(135deg,#6366f1,#4f46e5)"><div class="text-3xl font-bold" id="stat-users">-</div><div class="text-indigo-200 text-xs mt-1">Total Users</div></div>
+        <div class="stat-card" style="background:linear-gradient(135deg,#10b981,#059669)"><div class="text-3xl font-bold" id="stat-preds">-</div><div class="text-green-100 text-xs mt-1">Total Predictions</div></div>
+        <div class="stat-card" style="background:linear-gradient(135deg,#f59e0b,#d97706)"><div class="text-3xl font-bold" id="stat-today">-</div><div class="text-yellow-100 text-xs mt-1">Predictions Today</div></div>
+        <div class="stat-card" style="background:linear-gradient(135deg,#ec4899,#be185d)"><div class="text-3xl font-bold" id="stat-feedback">-</div><div class="text-pink-100 text-xs mt-1">Avg Feedback Rating</div></div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Usage Chart -->
+        <div class="card p-6">
+          <h3 class="font-bold text-slate-800 mb-4 text-sm">📈 Prediction Activity (Last 7 Days)</h3>
+          <canvas id="usage-chart" height="160"></canvas>
+        </div>
+        <!-- Feedback Chart -->
+        <div class="card p-6">
+          <h3 class="font-bold text-slate-800 mb-4 text-sm">⭐ Feedback Distribution</h3>
+          <canvas id="feedback-chart" height="160"></canvas>
+        </div>
+      </div>
+
+      <!-- User Table -->
+      <div class="card p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-bold text-slate-800 text-sm">👥 User Activity</h3>
+          <button onclick="loadAnalytics()" class="text-xs text-indigo-600 hover:text-indigo-700 font-medium">↻ Refresh</button>
+        </div>
+        <div id="analytics-users-loading" class="text-center py-6"><div class="spinner mx-auto"></div></div>
+        <div id="analytics-users-table" class="hidden overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="border-b-2 border-indigo-50 text-slate-500 text-xs uppercase">
+              <th class="text-left py-2 pr-3">User</th>
+              <th class="text-right py-2 pr-3">Predictions</th>
+              <th class="text-right py-2 pr-3">Avg Rating</th>
+              <th class="text-right py-2 pr-3">Role</th>
+              <th class="text-right py-2 pr-3">Joined</th>
+              <th class="text-right py-2">Actions</th>
+            </tr></thead>
+            <tbody id="analytics-users-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Feedback Table -->
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-800 mb-4 text-sm">💬 Recent Feedback</h3>
+        <div id="analytics-feedback-loading" class="text-center py-6"><div class="spinner mx-auto"></div></div>
+        <div id="analytics-feedback-empty" class="hidden text-center py-6 text-slate-400 text-sm">No feedback yet</div>
+        <div id="analytics-feedback-table" class="hidden overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="border-b-2 border-indigo-50 text-slate-500 text-xs uppercase">
+              <th class="text-left py-2 pr-3">User</th>
+              <th class="text-left py-2 pr-3">Formula</th>
+              <th class="text-center py-2 pr-3">Rating</th>
+              <th class="text-left py-2 pr-3">Comment</th>
+              <th class="text-right py-2">Date</th>
+            </tr></thead>
+            <tbody id="analytics-feedback-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- All Predictions -->
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-800 mb-4 text-sm">🔬 All Predictions</h3>
+        <div id="analytics-preds-loading" class="text-center py-6"><div class="spinner mx-auto"></div></div>
+        <div id="analytics-preds-table" class="hidden overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="border-b-2 border-indigo-50 text-slate-500 text-xs uppercase">
+              <th class="text-left py-2 pr-3">User</th>
+              <th class="text-left py-2 pr-3">Formula</th>
+              <th class="text-right py-2 pr-3">Voltage</th>
+              <th class="text-right py-2 pr-3">Form. E</th>
+              <th class="text-right py-2 pr-3">Density</th>
+              <th class="text-right py-2 pr-3">Hull</th>
+              <th class="text-right py-2 pr-3">Date</th>
+              <th class="text-right py-2">Del</th>
+            </tr></thead>
+            <tbody id="analytics-preds-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end page content -->
+</div><!-- end page-app -->
+
+<!-- RESET PASSWORD MODAL -->
+<div id="modal-reset" class="hidden modal-overlay" onclick="if(event.target===this) closeModal()">
+  <div class="card p-6 w-full max-w-sm mx-4 fade-in">
+    <h3 class="font-bold text-slate-800 mb-3">🔑 Reset Password</h3>
+    <p class="text-sm text-slate-500 mb-3">New password for <span id="modal-username" class="font-semibold text-indigo-700"></span></p>
+    <input id="modal-new-pw" type="password" placeholder="New password (min 4 chars)" class="input-field mb-3" />
+    <div id="modal-error" class="hidden text-red-500 text-xs mb-3"></div>
+    <div class="flex gap-3">
+      <button onclick="closeModal()" class="flex-1 border border-slate-200 text-slate-600 py-2 rounded-xl text-sm hover:bg-slate-50 transition">Cancel</button>
+      <button onclick="confirmResetPassword()" class="flex-1 bg-indigo-600 text-white py-2 rounded-xl text-sm hover:bg-indigo-700 transition font-semibold">Reset</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let token = localStorage.getItem('token');
+let username = localStorage.getItem('username');
+let isAdmin = false;  // always determined by server via validateSession, never trust localStorage alone
+let selectedFile = null;
+let propChart = null, usageChart = null, feedbackChart = null;
+let inputMode = 'cif';
+let resetTargetUid = null;
+let currentRating = 0;
+let lastPredictionId = null;
+
+async function validateSession() {
+  if (!token) return;
+  try {
+    const res = await fetch('/api/me', {headers: {'Authorization': 'Bearer ' + token}});
+    if (!res.ok) {
+      // Invalid token — clear everything and stay on login
+      localStorage.clear(); token = null; isAdmin = false; return;
+    }
+    const data = await res.json();
+    isAdmin = data.is_admin === true;  // strict boolean, never trust localStorage
+    username = data.username;
+    localStorage.setItem('is_admin', isAdmin);
+    localStorage.setItem('username', username);
+    showApp();
+  } catch(e) {
+    // Network error — clear admin to be safe, still show app
+    isAdmin = false;
+    localStorage.setItem('is_admin', 'false');
+    showApp();
+  }
+}
+
+if (token) validateSession();
+
+function showApp() {
+  document.getElementById('page-login').classList.add('hidden');
+  document.getElementById('page-app').classList.remove('hidden');
+  document.getElementById('nav-username').textContent = username || '';
+  // Always reset admin UI first, then conditionally show
+  document.getElementById('nav-admin-badge').classList.add('hidden');
+  document.getElementById('tab-analytics').classList.add('hidden');
+  if (isAdmin === true) {
+    document.getElementById('nav-admin-badge').classList.remove('hidden');
+    document.getElementById('tab-analytics').classList.remove('hidden');
+  }
+}
+
+function switchAuthTab(tab) {
+  const isSignin = tab === 'signin';
+  document.getElementById('form-signin').classList.toggle('hidden', !isSignin);
+  document.getElementById('form-register').classList.toggle('hidden', isSignin);
+  document.getElementById('auth-tab-signin').className = isSignin
+    ? 'flex-1 py-2 rounded-lg bg-white shadow text-indigo-700 font-semibold text-sm transition'
+    : 'flex-1 py-2 rounded-lg text-slate-500 font-medium text-sm transition';
+  document.getElementById('auth-tab-register').className = !isSignin
+    ? 'flex-1 py-2 rounded-lg bg-white shadow text-indigo-700 font-semibold text-sm transition'
+    : 'flex-1 py-2 rounded-lg text-slate-500 font-medium text-sm transition';
+  document.getElementById('auth-error').classList.add('hidden');
+  document.getElementById('auth-success').classList.add('hidden');
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg; el.classList.remove('hidden');
+  document.getElementById('auth-success').classList.add('hidden');
+}
+function showAuthSuccess(msg) {
+  const el = document.getElementById('auth-success');
+  el.textContent = msg; el.classList.remove('hidden');
+  document.getElementById('auth-error').classList.add('hidden');
+}
+
+async function doLogin() {
+  const email = document.getElementById('signin-email').value.trim();
+  const pw    = document.getElementById('signin-password').value;
+  document.getElementById('auth-error').classList.add('hidden');
+  if (!email || !pw) { showAuthError('Please enter your email and password'); return; }
+  if (!email.includes('@')) { showAuthError('Please enter a valid email address'); return; }
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email, password: pw})
+    });
+    const data = await res.json();
+    if (!res.ok) { showAuthError(data.error || 'Login failed'); return; }
+    token = data.token; username = data.username; isAdmin = data.is_admin === true;
+    localStorage.setItem('token', token);
+    localStorage.setItem('username', username);
+    localStorage.setItem('is_admin', isAdmin);
+    showApp();
+  } catch(e) { showAuthError('Connection error'); }
+}
+
+async function doRegister() {
+  const email   = document.getElementById('reg-email').value.trim();
+  const pw      = document.getElementById('reg-password').value;
+  const confirm = document.getElementById('reg-confirm').value;
+  document.getElementById('auth-error').classList.add('hidden');
+  if (!email || !pw) { showAuthError('Please fill in all fields'); return; }
+  if (!email.includes('@')) { showAuthError('Please enter a valid email address'); return; }
+  if (pw.length < 6) { showAuthError('Password must be at least 6 characters'); return; }
+  if (pw !== confirm) { showAuthError('Passwords do not match'); return; }
+  try {
+    const res = await fetch('/api/register', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email, password: pw})
+    });
+    const data = await res.json();
+    if (!res.ok) { showAuthError(data.error || 'Registration failed'); return; }
+    showAuthSuccess('Account created! You can now sign in.');
+    document.getElementById('reg-email').value = '';
+    document.getElementById('reg-password').value = '';
+    document.getElementById('reg-confirm').value = '';
+    setTimeout(() => switchAuthTab('signin'), 1200);
+  } catch(e) { showAuthError('Connection error'); }
+}
+
+async function logout() {
+  await fetch('/api/logout', {method:'POST', headers:{'Authorization':'Bearer '+token}}).catch(()=>{});
+  localStorage.clear();
+  token = null; username = null; isAdmin = false;
+  document.getElementById('page-app').classList.add('hidden');
+  document.getElementById('page-login').classList.remove('hidden');
+}
+
+const ALL_TABS = ['predict','compare','batch','history','analytics'];
+function showTab(tab) {
+  ALL_TABS.forEach(t => {
+    document.getElementById('tab-content-'+t).classList.add('hidden');
+    const btn = document.getElementById('tab-'+t);
+    if (btn) { btn.classList.remove('active'); }
+  });
+  document.getElementById('tab-content-'+tab).classList.remove('hidden');
+  document.getElementById('tab-'+tab).classList.add('active');
+  if (tab === 'history')   loadHistory();
+  if (tab === 'analytics') loadAnalytics();
+}
+
+function setInputMode(mode) {
+  inputMode = mode;
+  document.getElementById('input-cif').classList.toggle('hidden', mode !== 'cif');
+  document.getElementById('input-composition').classList.toggle('hidden', mode !== 'composition');
+  document.getElementById('toggle-cif').className  = mode === 'cif'
+    ? 'flex-1 py-1.5 rounded-lg bg-white shadow text-indigo-700 font-semibold transition'
+    : 'flex-1 py-1.5 rounded-lg text-slate-500 font-medium transition';
+  document.getElementById('toggle-comp').className = mode === 'composition'
+    ? 'flex-1 py-1.5 rounded-lg bg-white shadow text-indigo-700 font-semibold transition'
+    : 'flex-1 py-1.5 rounded-lg text-slate-500 font-medium transition';
+  document.getElementById('predict-btn').disabled = true;
+  resetResults();
+}
+
+function setFormula(f) { document.getElementById('inp-formula').value = f; onFormulaInput(); }
+function onFormulaInput() {
+  document.getElementById('predict-btn').disabled = document.getElementById('inp-formula').value.trim().length < 2;
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag');
+  handleFile(e.dataTransfer.files[0]);
+}
+function handleFile(file) {
+  if (!file || !file.name.endsWith('.cif')) { alert('Please upload a .cif file'); return; }
+  selectedFile = file;
+  document.getElementById('file-info').classList.remove('hidden');
+  document.getElementById('file-name').textContent = file.name;
+  document.getElementById('file-size').textContent = (file.size/1024).toFixed(1)+' KB';
+  document.getElementById('predict-btn').disabled = false;
+  resetResults();
+}
+
+function resetResults() {
+  document.getElementById('results-empty').classList.remove('hidden');
+  document.getElementById('results-content').classList.add('hidden');
+  document.getElementById('results-error').classList.add('hidden');
+  document.getElementById('results-loading').classList.add('hidden');
+  currentRating = 0; lastPredictionId = null;
+  document.getElementById('feedback-thanks').classList.add('hidden');
+  document.getElementById('feedback-btn').disabled = true;
+  updateStars(0);
+}
+</script>
+
+<script>
+async function runPrediction() {
+  resetResults();
+  document.getElementById('results-empty').classList.add('hidden');
+  document.getElementById('results-loading').classList.remove('hidden');
+  document.getElementById('predict-btn').disabled = true;
+  try {
+    let res;
+    if (inputMode === 'cif') {
+      const form = new FormData();
+      form.append('file', selectedFile);
+      res = await fetch('/api/predict', {method:'POST', headers:{'Authorization':'Bearer '+token}, body:form});
+    } else {
+      const formula = document.getElementById('inp-formula').value.trim();
+      res = await fetch('/api/predict-composition', {
+        method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body: JSON.stringify({formula})
+      });
+    }
+    const data = await res.json();
+    document.getElementById('results-loading').classList.add('hidden');
+    document.getElementById('predict-btn').disabled = false;
+
+    if (!res.ok) {
+      const errDiv = document.getElementById('results-error');
+      const msg = data.error || 'Prediction failed';
+      const suggestions = data.suggestions || [];
+      let html = `<div class="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
+        <div class="font-semibold mb-1">❌ Invalid Composition</div>
+        <div class="text-red-600 text-xs mb-2">${escHtml(msg)}</div>`;
+      if (suggestions.length) {
+        html += `<div class="mt-3 pt-3 border-t border-red-100">
+          <div class="text-xs font-semibold text-slate-600 mb-2">💡 Did you mean one of these?</div>
+          <div class="flex flex-wrap gap-2">
+            ${suggestions.map(s => `<span class="chip cursor-pointer bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs px-3 py-1 rounded-full hover:bg-indigo-100 transition"
+              onclick="setFormula('${s}');setInputMode('composition')">${s}</span>`).join('')}
+          </div>
+        </div>`;
+      }
+      html += '</div>';
+      errDiv.innerHTML = html;
+      errDiv.classList.remove('hidden');
+      return;
+    }
+
+    lastPredictionId = data.prediction_id || null;
+    const p = data.predictions;
+    const conf = data.confidence || {};
+    renderConfidenceBars(p, conf);
+    document.getElementById('res-formula').textContent = data.formula;
+    document.getElementById('res-material-id').textContent =
+      data.source_message ? `${data.material_id}  •  ${data.source_message}` : (data.material_id || '');
+    document.getElementById('res-voltage').textContent  = p.voltage.toFixed(3) + ' V';
+    document.getElementById('res-energy').textContent   = p.formation_energy.toFixed(3);
+    document.getElementById('res-density').textContent  = p.density.toFixed(3);
+    document.getElementById('res-hull').textContent     = p.energy_above_hull.toFixed(4);
+
+    const badge = document.getElementById('stability-badge');
+    if (p.energy_above_hull < 0.05) {
+      badge.textContent = '✅ Stable'; badge.className = 'text-xs font-bold px-3 py-1.5 rounded-full bg-green-100 text-green-700';
+    } else if (p.energy_above_hull < 0.1) {
+      badge.textContent = '⚠️ Metastable'; badge.className = 'text-xs font-bold px-3 py-1.5 rounded-full bg-yellow-100 text-yellow-700';
+    } else {
+      badge.textContent = '❌ Unstable'; badge.className = 'text-xs font-bold px-3 py-1.5 rounded-full bg-red-100 text-red-700';
+    }
+
+    document.getElementById('results-content').classList.remove('hidden');
+    showLineChart(p);
+  } catch(e) {
+    document.getElementById('results-loading').classList.add('hidden');
+    document.getElementById('predict-btn').disabled = false;
+    const errDiv = document.getElementById('results-error');
+    errDiv.innerHTML = `<div class="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">❌ Connection error: ${escHtml(e.message)}</div>`;
+    errDiv.classList.remove('hidden');
+  }
+}
+
+function showLineChart(p) {
+  if (propChart) propChart.destroy();
+  const ctx = document.getElementById('prop-chart').getContext('2d');
+  const labels = ['Voltage (V)', 'Formation Energy (eV/atom)', 'Density (g/cm³)', 'Energy Above Hull (eV)'];
+  const values = [p.voltage, p.formation_energy, p.density, p.energy_above_hull];
+  propChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Predicted Value',
+        data: values,
+        borderColor: '#6366f1',
+        backgroundColor: 'rgba(99,102,241,0.08)',
+        pointBackgroundColor: ['#3b82f6','#f97316','#22c55e','#a855f7'],
+        pointBorderColor: ['#3b82f6','#f97316','#22c55e','#a855f7'],
+        pointRadius: 7,
+        pointHoverRadius: 10,
+        borderWidth: 2.5,
+        fill: true,
+        tension: 0.4
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.parsed.y.toFixed(4)}`
+          }
+        }
+      },
+      scales: {
+        y: { grid: { color: '#f0f2ff' }, ticks: { font: { size: 11 } } },
+        x: { grid: { display: false }, ticks: { font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+// ---- FEEDBACK ----
+const ratingLabels = ['','Poor','Fair','Good','Very Good','Excellent'];
+function setRating(n) {
+  currentRating = n;
+  updateStars(n);
+  document.getElementById('rating-label').textContent = ratingLabels[n];
+  document.getElementById('feedback-btn').disabled = false;
+}
+function updateStars(n) {
+  for (let i = 1; i <= 5; i++) {
+    document.getElementById('star-'+i).textContent = i <= n ? '★' : '☆';
+    document.getElementById('star-'+i).style.color = i <= n ? '#f59e0b' : '#cbd5e1';
+  }
+}
+function renderConfidenceBars(p, conf) {
+  const props = [
+    { key: 'voltage',           label: 'Voltage',          color: '#3b82f6', unit: 'V' },
+    { key: 'formation_energy',  label: 'Formation Energy', color: '#f97316', unit: 'eV/atom' },
+    { key: 'density',           label: 'Density',          color: '#22c55e', unit: 'g/cm³' },
+    { key: 'energy_above_hull', label: 'Hull Energy',      color: '#a855f7', unit: 'eV' },
+  ];
+  const container = document.getElementById('confidence-bars');
+  container.innerHTML = props.map(prop => {
+    const std  = (conf && conf[prop.key] != null) ? conf[prop.key] : null;
+    const mean = Math.abs(p[prop.key]) || 1;
+    let pct, stdTxt, label;
+    if (std === null) {
+      pct = 85; stdTxt = ''; label = 'Good';
+    } else if (std === 0) {
+      pct = 99; stdTxt = '±0'; label = 'Excellent';
+    } else {
+      // relative std as % of mean, capped at 50% → maps to 50-100% confidence
+      const relStd = (std / mean) * 100;
+      pct = Math.max(50, Math.min(99, 100 - relStd));
+      stdTxt = `±${std.toFixed(4)} ${prop.unit}`;
+      label = pct >= 90 ? 'Excellent' : pct >= 75 ? 'Good' : pct >= 60 ? 'Fair' : 'Low';
+    }
+    const labelColor = pct >= 90 ? '#22c55e' : pct >= 75 ? prop.color : pct >= 60 ? '#f59e0b' : '#ef4444';
+    return `
+      <div>
+        <div class="flex justify-between text-xs mb-1">
+          <span class="text-slate-600 font-medium">${prop.label}</span>
+          <span class="text-slate-400">${stdTxt}&nbsp;<span class="font-semibold" style="color:${labelColor}">${pct.toFixed(0)}% ${label}</span></span>
+        </div>
+        <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div class="h-full rounded-full transition-all duration-700" style="width:${pct}%;background:${prop.color}"></div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function submitFeedback() {
+  const comment = document.getElementById('feedback-text').value.trim();
+  const formula = document.getElementById('res-formula').textContent.trim();
+  try {
+    await fetch('/api/feedback', {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body: JSON.stringify({prediction_id: lastPredictionId, rating: currentRating, comment, formula})
+    });
+    document.getElementById('feedback-thanks').classList.remove('hidden');
+    document.getElementById('feedback-btn').disabled = true;
+  } catch(e) {}
+}
+
+async function loadHistory() {
+  document.getElementById('history-loading').classList.remove('hidden');
+  document.getElementById('history-empty').classList.add('hidden');
+  document.getElementById('history-table').classList.add('hidden');
+  try {
+    const res  = await fetch('/api/history', {headers:{'Authorization':'Bearer '+token}});
+    const data = await res.json();
+    document.getElementById('history-loading').classList.add('hidden');
+    if (!data.length) { document.getElementById('history-empty').classList.remove('hidden'); return; }
+    document.getElementById('history-body').innerHTML = data.map(r => `
+      <tr class="border-b border-slate-50 hover:bg-indigo-50/30 transition">
+        <td class="py-3 pr-4"><div class="font-semibold text-slate-800 text-xs">${escHtml(r.formula)}</div><div class="text-xs text-slate-400">${escHtml(r.material_id)}</div></td>
+        <td class="text-right py-3 pr-4 text-blue-600 font-semibold text-xs">${r.voltage?.toFixed(3)??'-'}</td>
+        <td class="text-right py-3 pr-4 text-orange-600 font-semibold text-xs">${r.formation_energy?.toFixed(3)??'-'}</td>
+        <td class="text-right py-3 pr-4 text-green-600 font-semibold text-xs">${r.density?.toFixed(3)??'-'}</td>
+        <td class="text-right py-3 pr-4 text-purple-600 font-semibold text-xs">${r.energy_above_hull?.toFixed(4)??'-'}</td>
+        <td class="text-right py-3 text-slate-400 text-xs">${new Date(r.created_at).toLocaleDateString()}</td>
+      </tr>`).join('');
+    document.getElementById('history-table').classList.remove('hidden');
+  } catch(e) { document.getElementById('history-loading').classList.add('hidden'); }
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+
+<script>
+// ============================================================
+// ANALYTICS (admin-only)
+// ============================================================
+async function loadAnalytics() {
+  if (!isAdmin) return;
+  loadAnalyticsStats();
+  loadAnalyticsUsers();
+  loadAnalyticsFeedback();
+  loadAnalyticsPredictions();
+}
+
+async function loadAnalyticsStats() {
+  try {
+    const res  = await fetch('/api/admin/stats', {headers:{'Authorization':'Bearer '+token}});
+    const data = await res.json();
+    document.getElementById('stat-users').textContent   = data.total_users;
+    document.getElementById('stat-preds').textContent   = data.total_predictions;
+    document.getElementById('stat-today').textContent   = data.predictions_today;
+    document.getElementById('stat-feedback').textContent = data.avg_rating ? data.avg_rating.toFixed(1) + ' ★' : 'N/A';
+
+    // Usage line chart
+    if (usageChart) usageChart.destroy();
+    const uctx = document.getElementById('usage-chart').getContext('2d');
+    usageChart = new Chart(uctx, {
+      type: 'line',
+      data: {
+        labels: data.daily_labels || [],
+        datasets: [{
+          label: 'Predictions',
+          data: data.daily_counts || [],
+          borderColor: '#6366f1',
+          backgroundColor: 'rgba(99,102,241,0.10)',
+          pointBackgroundColor: '#6366f1',
+          pointRadius: 5, pointHoverRadius: 8,
+          borderWidth: 2.5, fill: true, tension: 0.4
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, grid: { color: '#f0f2ff' }, ticks: { stepSize: 1 } },
+          x: { grid: { display: false } }
+        }
+      }
+    });
+
+    // Feedback donut chart
+    if (feedbackChart) feedbackChart.destroy();
+    const fctx = document.getElementById('feedback-chart').getContext('2d');
+    feedbackChart = new Chart(fctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['⭐ 1','⭐⭐ 2','⭐⭐⭐ 3','⭐⭐⭐⭐ 4','⭐⭐⭐⭐⭐ 5'],
+        datasets: [{
+          data: data.rating_dist || [0,0,0,0,0],
+          backgroundColor: ['#ef4444','#f97316','#f59e0b','#22c55e','#6366f1'],
+          borderWidth: 2, borderColor: '#fff'
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: 'right', labels: { font: { size: 11 } } } },
+        cutout: '60%'
+      }
+    });
+  } catch(e) {}
+}
+
+async function loadAnalyticsUsers() {
+  document.getElementById('analytics-users-loading').classList.remove('hidden');
+  document.getElementById('analytics-users-table').classList.add('hidden');
+  try {
+    const res  = await fetch('/api/admin/users', {headers:{'Authorization':'Bearer '+token}});
+    const data = await res.json();
+    document.getElementById('analytics-users-loading').classList.add('hidden');
+    document.getElementById('analytics-users-body').innerHTML = data.map(u => `
+      <tr class="border-b border-slate-50 hover:bg-indigo-50/30 transition" id="user-row-${u.id}">
+        <td class="py-2.5 pr-3 font-semibold text-slate-800 text-sm">${escHtml(u.username)}</td>
+        <td class="text-right py-2.5 pr-3 text-indigo-600 font-semibold text-xs">${u.pred_count}</td>
+        <td class="text-right py-2.5 pr-3 text-yellow-500 text-xs">${u.avg_rating ? u.avg_rating.toFixed(1)+' ★' : '—'}</td>
+        <td class="text-right py-2.5 pr-3">
+          ${u.is_admin
+            ? '<span class="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded-full font-semibold">Admin</span>'
+            : '<span class="bg-slate-100 text-slate-500 text-xs px-2 py-0.5 rounded-full">User</span>'}
+        </td>
+        <td class="text-right py-2.5 pr-3 text-slate-400 text-xs">${new Date(u.created_at).toLocaleDateString()}</td>
+        <td class="text-right py-2.5">
+          <div class="flex gap-1 justify-end">
+            <button onclick="openResetModal(${u.id},'${escHtml(u.username)}')"
+              class="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 px-2 py-1 rounded-lg hover:bg-yellow-100 transition">🔑</button>
+            <button onclick="toggleAdmin(${u.id})"
+              class="text-xs bg-purple-50 text-purple-700 border border-purple-200 px-2 py-1 rounded-lg hover:bg-purple-100 transition">${u.is_admin ? '⬇️' : '⬆️'}</button>
+            <button onclick="deleteUser(${u.id})"
+              class="text-xs bg-red-50 text-red-600 border border-red-200 px-2 py-1 rounded-lg hover:bg-red-100 transition">🗑️</button>
+          </div>
+        </td>
+      </tr>`).join('');
+    document.getElementById('analytics-users-table').classList.remove('hidden');
+  } catch(e) { document.getElementById('analytics-users-loading').classList.add('hidden'); }
+}
+
+async function loadAnalyticsFeedback() {
+  document.getElementById('analytics-feedback-loading').classList.remove('hidden');
+  try {
+    const res  = await fetch('/api/admin/feedback', {headers:{'Authorization':'Bearer '+token}});
+    const data = await res.json();
+    document.getElementById('analytics-feedback-loading').classList.add('hidden');
+    if (!data.length) { document.getElementById('analytics-feedback-empty').classList.remove('hidden'); return; }
+    document.getElementById('analytics-feedback-body').innerHTML = data.map(f => `
+      <tr class="border-b border-slate-50 hover:bg-indigo-50/30 transition">
+        <td class="py-2.5 pr-3 font-medium text-slate-700 text-xs">${escHtml(f.username)}</td>
+        <td class="py-2.5 pr-3 text-xs font-mono text-slate-600">${escHtml(f.formula||'—')}</td>
+        <td class="text-center py-2.5 pr-3 text-yellow-500 text-xs">${'★'.repeat(f.rating)}${'☆'.repeat(5-f.rating)}</td>
+        <td class="py-2.5 pr-3 text-xs text-slate-500 max-w-xs truncate">${escHtml(f.comment||'—')}</td>
+        <td class="text-right py-2.5 text-slate-400 text-xs">${new Date(f.created_at).toLocaleDateString()}</td>
+      </tr>`).join('');
+    document.getElementById('analytics-feedback-table').classList.remove('hidden');
+  } catch(e) { document.getElementById('analytics-feedback-loading').classList.add('hidden'); }
+}
+
+async function loadAnalyticsPredictions() {
+  document.getElementById('analytics-preds-loading').classList.remove('hidden');
+  document.getElementById('analytics-preds-table').classList.add('hidden');
+  try {
+    const res  = await fetch('/api/admin/predictions', {headers:{'Authorization':'Bearer '+token}});
+    const data = await res.json();
+    document.getElementById('analytics-preds-loading').classList.add('hidden');
+    document.getElementById('analytics-preds-body').innerHTML = data.map(r => `
+      <tr class="border-b border-slate-50 hover:bg-indigo-50/30 transition" id="pred-row-${r.id}">
+        <td class="py-2 pr-3 text-xs font-medium text-slate-700">${escHtml(r.username)}</td>
+        <td class="py-2 pr-3 text-xs font-mono text-slate-600">${escHtml(r.formula)}</td>
+        <td class="text-right py-2 pr-3 text-xs text-blue-600">${r.voltage?.toFixed(3)??'-'}</td>
+        <td class="text-right py-2 pr-3 text-xs text-orange-600">${r.formation_energy?.toFixed(3)??'-'}</td>
+        <td class="text-right py-2 pr-3 text-xs text-green-600">${r.density?.toFixed(3)??'-'}</td>
+        <td class="text-right py-2 pr-3 text-xs text-purple-600">${r.energy_above_hull?.toFixed(4)??'-'}</td>
+        <td class="text-right py-2 pr-3 text-xs text-slate-400">${new Date(r.created_at).toLocaleDateString()}</td>
+        <td class="text-right py-2">
+          <button onclick="deletePrediction(${r.id})"
+            class="text-xs bg-red-50 text-red-500 border border-red-200 px-2 py-0.5 rounded-lg hover:bg-red-100 transition">🗑️</button>
+        </td>
+      </tr>`).join('');
+    document.getElementById('analytics-preds-table').classList.remove('hidden');
+  } catch(e) { document.getElementById('analytics-preds-loading').classList.add('hidden'); }
+}
+
+async function deleteUser(uid) {
+  if (!confirm('Delete this user and all their data?')) return;
+  const res = await fetch(`/api/admin/users/${uid}`, {method:'DELETE', headers:{'Authorization':'Bearer '+token}});
+  if (res.ok) { document.getElementById('user-row-'+uid)?.remove(); loadAnalyticsStats(); }
+  else { const d = await res.json(); alert(d.error||'Failed'); }
+}
+async function toggleAdmin(uid) {
+  const res = await fetch(`/api/admin/users/${uid}/toggle-admin`, {method:'PATCH', headers:{'Authorization':'Bearer '+token}});
+  if (res.ok) loadAnalyticsUsers();
+}
+async function deletePrediction(pid) {
+  if (!confirm('Delete this prediction?')) return;
+  const res = await fetch(`/api/admin/predictions/${pid}`, {method:'DELETE', headers:{'Authorization':'Bearer '+token}});
+  if (res.ok) { document.getElementById('pred-row-'+pid)?.remove(); loadAnalyticsStats(); }
+}
+function openResetModal(uid, uname) {
+  resetTargetUid = uid;
+  document.getElementById('modal-username').textContent = uname;
+  document.getElementById('modal-new-pw').value = '';
+  document.getElementById('modal-error').classList.add('hidden');
+  document.getElementById('modal-reset').classList.remove('hidden');
+}
+function closeModal() { document.getElementById('modal-reset').classList.add('hidden'); resetTargetUid = null; }
+async function confirmResetPassword() {
+  const pw = document.getElementById('modal-new-pw').value.trim();
+  const errEl = document.getElementById('modal-error');
+  if (pw.length < 4) { errEl.textContent = 'Min 4 characters'; errEl.classList.remove('hidden'); return; }
+  const res  = await fetch(`/api/admin/users/${resetTargetUid}/reset-password`, {
+    method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+    body: JSON.stringify({password:pw})
+  });
+  const data = await res.json();
+  if (res.ok) { closeModal(); alert('Password reset successfully'); }
+  else { errEl.textContent = data.error||'Failed'; errEl.classList.remove('hidden'); }
+}
+</script>
+
+<script>
+// ============================================================
+// COMPARE TAB
+// ============================================================
+let radarChart = null;
+
+function checkCompareReady() {
+  const a = document.getElementById('cmp-formula-a').value.trim();
+  const b = document.getElementById('cmp-formula-b').value.trim();
+  document.getElementById('compare-btn').disabled = !(a.length >= 2 && b.length >= 2);
+}
+
+async function runCompare() {
+  const fa = document.getElementById('cmp-formula-a').value.trim();
+  const fb = document.getElementById('cmp-formula-b').value.trim();
+  document.getElementById('compare-results').classList.add('hidden');
+  document.getElementById('compare-error').classList.add('hidden');
+  document.getElementById('compare-loading').classList.remove('hidden');
+  document.getElementById('compare-btn').disabled = true;
+  try {
+    const res = await fetch('/api/predict-compare', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer '+token, 'Content-Type': 'application/json'},
+      body: JSON.stringify({formula_a: fa, formula_b: fb})
+    });
+    const data = await res.json();
+    document.getElementById('compare-loading').classList.add('hidden');
+    document.getElementById('compare-btn').disabled = false;
+    if (!res.ok) {
+      const msg = data.error || 'Compare failed';
+      const suggestions = data.suggestions || [];
+      let html = `<div class="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
+        <div class="font-semibold mb-1">❌ Invalid Composition</div>
+        <div class="text-xs text-red-600 mb-2">${escHtml(msg)}</div>`;
+      if (suggestions.length) {
+        const field = data.field === 'b' ? 'cmp-formula-b' : 'cmp-formula-a';
+        html += `<div class="mt-2 pt-2 border-t border-red-100">
+          <div class="text-xs font-semibold text-slate-600 mb-2">💡 Suggestions:</div>
+          <div class="flex flex-wrap gap-2">
+            ${suggestions.map(s => `<span class="chip text-xs cursor-pointer"
+              onclick="document.getElementById('${field}').value='${s}';checkCompareReady()">${s}</span>`).join('')}
+          </div></div>`;
+      }
+      html += '</div>';
+      document.getElementById('compare-error').innerHTML = html;
+      document.getElementById('compare-error').classList.remove('hidden');
+      return;
+    }
+    renderCompareResults(fa, fb, data.result_a, data.result_b);
+  } catch(e) {
+    document.getElementById('compare-loading').classList.add('hidden');
+    document.getElementById('compare-btn').disabled = false;
+    document.getElementById('compare-error').querySelector('div').textContent = '❌ Connection error: ' + e.message;
+    document.getElementById('compare-error').classList.remove('hidden');
+  }
+}
+
+function renderCompareResults(fa, fb, ra, rb) {
+  document.getElementById('cmp-head-a').textContent = fa;
+  document.getElementById('cmp-head-b').textContent = fb;
+
+  const props = [
+    { key:'voltage',           label:'Voltage (V)',               higherBetter: true,  fmt: v => v.toFixed(3) },
+    { key:'formation_energy',  label:'Formation Energy (eV/atom)', higherBetter: false, fmt: v => v.toFixed(3) },
+    { key:'density',           label:'Density (g/cm³)',           higherBetter: false, fmt: v => v.toFixed(3) },
+    { key:'energy_above_hull', label:'Hull Energy (eV)',          higherBetter: false, fmt: v => v.toFixed(4) },
+  ];
+  const pa = ra.predictions, pb = rb.predictions;
+  const confA = ra.confidence || {}, confB = rb.confidence || {};
+
+  document.getElementById('compare-table-body').innerHTML = props.map(prop => {
+    const va = pa[prop.key], vb = pb[prop.key];
+    const aWins = prop.higherBetter ? va > vb : va < vb;
+    const winner = Math.abs(va - vb) < 1e-6 ? '—'
+      : (aWins ? `<span class="text-indigo-600 font-bold">${escHtml(fa)}</span>`
+               : `<span class="text-purple-600 font-bold">${escHtml(fb)}</span>`);
+    const aClass = aWins ? 'text-indigo-700 font-bold' : 'text-slate-600';
+    const bClass = !aWins ? 'text-purple-700 font-bold' : 'text-slate-600';
+    return `<tr class="border-b border-slate-50 hover:bg-indigo-50/20 transition">
+      <td class="py-2.5 pr-4 text-xs text-slate-500 font-medium">${prop.label}</td>
+      <td class="text-right py-2.5 pr-4 text-xs ${aClass}">${prop.fmt(va)}</td>
+      <td class="text-right py-2.5 pr-4 text-xs ${bClass}">${prop.fmt(vb)}</td>
+      <td class="text-right py-2.5 text-xs">${winner}</td>
+    </tr>`;
+  }).join('');
+
+  // Radar chart
+  if (radarChart) radarChart.destroy();
+  const rctx = document.getElementById('radar-chart').getContext('2d');
+  const keysOrder = ['voltage','formation_energy','density','energy_above_hull'];
+  const normalize = (key, val) => {
+    const mn = Math.min(pa[key], pb[key]), mx = Math.max(pa[key], pb[key]);
+    return mx === mn ? 0.5 : (val - mn) / (mx - mn);
+  };
+  radarChart = new Chart(rctx, {
+    type: 'radar',
+    data: {
+      labels: ['Voltage','Form. Energy','Density','Hull Energy'],
+      datasets: [
+        { label: fa, data: keysOrder.map(k => normalize(k, pa[k])),
+          borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,0.15)',
+          pointBackgroundColor:'#6366f1', borderWidth:2, pointRadius:4 },
+        { label: fb, data: keysOrder.map(k => normalize(k, pb[k])),
+          borderColor:'#a855f7', backgroundColor:'rgba(168,85,247,0.15)',
+          pointBackgroundColor:'#a855f7', borderWidth:2, pointRadius:4 }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position:'bottom', labels:{ font:{ size:12 } } } },
+      scales: { r: { min:0, max:1, ticks:{ display:false }, grid:{ color:'#e0e7ff' }, pointLabels:{ font:{ size:12 } } } }
+    }
+  });
+
+  // Confidence comparison
+  const confProps = [
+    { key:'voltage',           label:'Voltage',       color:'#3b82f6' },
+    { key:'formation_energy',  label:'Form. Energy',  color:'#f97316' },
+    { key:'density',           label:'Density',       color:'#22c55e' },
+    { key:'energy_above_hull', label:'Hull Energy',   color:'#a855f7' },
+  ];
+  document.getElementById('compare-confidence').innerHTML = confProps.map(prop => {
+    const stdA = confA[prop.key] ?? null, stdB = confB[prop.key] ?? null;
+    const meanA = Math.abs(pa[prop.key]) || 1, meanB = Math.abs(pb[prop.key]) || 1;
+    const pctA = stdA !== null ? Math.max(0, Math.min(100, 100-(stdA/meanA)*100)) : 85;
+    const pctB = stdB !== null ? Math.max(0, Math.min(100, 100-(stdB/meanB)*100)) : 85;
+    return `<div class="space-y-1 mb-3">
+      <div class="text-xs font-semibold text-slate-600 mb-1">${prop.label}</div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-indigo-500 w-20 truncate">${escHtml(fa)}</span>
+        <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div class="h-full rounded-full transition-all duration-700" style="width:${pctA}%;background:${prop.color}"></div>
+        </div>
+        <span class="text-xs font-semibold w-10 text-right" style="color:${prop.color}">${pctA.toFixed(0)}%</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-purple-500 w-20 truncate">${escHtml(fb)}</span>
+        <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div class="h-full rounded-full transition-all duration-700" style="width:${pctB}%;background:${prop.color};opacity:0.6"></div>
+        </div>
+        <span class="text-xs font-semibold w-10 text-right" style="color:${prop.color}">${pctB.toFixed(0)}%</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('compare-results').classList.remove('hidden');
+}
+
+// ============================================================
+// BATCH TAB
+// ============================================================
+let batchData = [];
+
+function checkBatchReady() {
+  const lines = document.getElementById('batch-input').value.trim().split('\n').filter(l => l.trim());
+  document.getElementById('batch-btn').disabled = lines.length === 0;
+}
+
+async function runBatch() {
+  const lines = document.getElementById('batch-input').value.trim().split('\n')
+    .map(l => l.trim()).filter(Boolean).slice(0, 20);
+  if (!lines.length) return;
+
+  document.getElementById('batch-results').classList.add('hidden');
+  document.getElementById('batch-download').classList.add('hidden');
+  document.getElementById('batch-loading').classList.remove('hidden');
+  document.getElementById('batch-btn').disabled = true;
+  document.getElementById('batch-progress').textContent = `Processing ${lines.length} formulas...`;
+
+  try {
+    const res = await fetch('/api/predict-batch', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer '+token, 'Content-Type': 'application/json'},
+      body: JSON.stringify({formulas: lines})
+    });
+    const data = await res.json();
+    document.getElementById('batch-loading').classList.add('hidden');
+    document.getElementById('batch-btn').disabled = false;
+    if (!res.ok) {
+      document.getElementById('batch-results').innerHTML =
+        `<div class="card p-4"><div class="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">❌ ${escHtml(data.error || 'Batch failed')}</div></div>`;
+      document.getElementById('batch-results').classList.remove('hidden');
+      return;
+    }
+    batchData = data.results || [];
+    renderBatchResults(batchData);
+  } catch(e) {
+    document.getElementById('batch-loading').classList.add('hidden');
+    document.getElementById('batch-btn').disabled = false;
+    document.getElementById('batch-results').innerHTML =
+      `<div class="card p-4"><div class="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">❌ Connection error: ${escHtml(e.message)}</div></div>`;
+    document.getElementById('batch-results').classList.remove('hidden');
+  }
+}
+
+function stabilityLabel(hull) {
+  if (hull < 0.05) return '<span class="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full font-semibold">Stable</span>';
+  if (hull < 0.1)  return '<span class="bg-yellow-100 text-yellow-700 text-xs px-2 py-0.5 rounded-full font-semibold">Metastable</span>';
+  return '<span class="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded-full font-semibold">Unstable</span>';
+}
+
+function renderBatchResults(results) {
+  document.getElementById('batch-count').textContent = `(${results.length})`;
+  document.getElementById('batch-body').innerHTML = results.map(r => {
+    if (r.error) return `<tr class="border-b border-slate-50">
+      <td class="py-2 pr-3 font-mono text-xs text-slate-700">${escHtml(r.formula)}</td>
+      <td colspan="6" class="text-xs text-red-500 py-2">❌ ${escHtml(r.error)}</td>
+    </tr>`;
+    const p = r.predictions, conf = r.confidence || {};
+    const confKeys = Object.keys(conf);
+    const meanConf = confKeys.length
+      ? confKeys.reduce((acc, k) => {
+          const mean = Math.abs(p[k]) || 1;
+          return acc + Math.max(0, Math.min(100, 100 - (conf[k]/mean)*100));
+        }, 0) / confKeys.length
+      : 85;
+    return `<tr class="border-b border-slate-50 hover:bg-indigo-50/20 transition">
+      <td class="py-2.5 pr-3 font-mono text-xs font-semibold text-slate-800">${escHtml(r.formula)}</td>
+      <td class="text-right py-2.5 pr-3 text-xs text-blue-600 font-semibold">${p.voltage?.toFixed(3)??'-'}</td>
+      <td class="text-right py-2.5 pr-3 text-xs text-orange-600">${p.formation_energy?.toFixed(3)??'-'}</td>
+      <td class="text-right py-2.5 pr-3 text-xs text-green-600">${p.density?.toFixed(3)??'-'}</td>
+      <td class="text-right py-2.5 pr-3 text-xs text-purple-600">${p.energy_above_hull?.toFixed(4)??'-'}</td>
+      <td class="py-2.5 pr-3 text-right">${stabilityLabel(p.energy_above_hull)}</td>
+      <td class="text-right py-2.5 text-xs font-semibold text-indigo-600">${meanConf.toFixed(0)}%</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('batch-results').classList.remove('hidden');
+  document.getElementById('batch-download').classList.remove('hidden');
+}
+
+function downloadBatchCSV() {
+  if (!batchData.length) return;
+  const header = 'Formula,Voltage (V),Formation Energy (eV/atom),Density (g/cm3),Hull Energy (eV),Stability,Error';
+  const rows = batchData.map(r => {
+    if (r.error) return `${r.formula},,,,,,${r.error}`;
+    const p = r.predictions;
+    const stab = p.energy_above_hull < 0.05 ? 'Stable' : p.energy_above_hull < 0.1 ? 'Metastable' : 'Unstable';
+    return `${r.formula},${p.voltage?.toFixed(3)},${p.formation_energy?.toFixed(3)},${p.density?.toFixed(3)},${p.energy_above_hull?.toFixed(4)},${stab},`;
+  });
+  const csv = [header, ...rows].join('\n');
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'batch_predictions.csv';
+  a.click();
+}
+</script>
+</body>
+</html>
