@@ -21,7 +21,7 @@ predictions.db
 *.pth
 
 # Dataset CIF files (large — share separately)
-Li_Battery_GNN_Dataset/
+#Li_Battery_GNN_Dataset/
 
 # Temp / debug scripts
 check_db.py
